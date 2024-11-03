@@ -1,12 +1,12 @@
 [package]
 name = "zotero_client"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "zotero android app client, only support file sync"
+authors = ["booiris <booiris02@gmail.com>"]
 edition = "2021"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -22,4 +22,41 @@ tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "charset",
+    "cookies",
+    "gzip",
+    "stream"
+] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-error = "0.2"
+tracing-appender = "0.2"
+chrono = "0.4"
+thiserror = "1.0"
+reqwest_dav = { version = "0.1", default-features = false, features = [
+    "rustls-tls"
+] }
+parking_lot = "0.12"
+ahash = "0.8"
 
+[dev-dependencies]
+dotenvy_macro = "0.15"
+ctor = "0.2"
+
+[profile.dev]
+incremental = true # Compile your binary in smaller steps.
+
+[profile.release]
+codegen-units = 1 # Allows LLVM to perform better optimization.
+lto = true # Enables link-time-optimizations.
+opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
+panic = "abort" # Higher performance by disabling panic handlers.
+strip = true # Ensures debug symbols are removed.
+
+[features]
+__local_test__ = []
