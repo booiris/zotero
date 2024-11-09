@@ -1,38 +1,63 @@
-use anyhow::Context;
-use dal::webdav::client;
-use error::Error;
+use dal::zotero::Zotero;
+use model::zotero_data::Data;
+use parking_lot::Mutex;
+use tauri::Manager;
+use tauri_plugin_fs::FsExt;
 
 mod api;
 mod dal;
 mod error;
+mod model;
 
-async fn temp(url: String) -> Result<String, Error> {
-    let resp = client(&url, None)
-        .context("init client error")?
-        .get("/")
-        .await
-        .context("get error")?
-        .text()
-        .await;
-    Ok(format!("calling url: {}, response: {:?}", url, resp))
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-async fn greet(url: String) -> String {
-    match temp(url).await {
-        Ok(resp) => resp,
-        Err(e) => format!("error: {:?}", e),
-    }
+#[derive(Default)]
+pub(crate) struct AppState {
+    pub zotero: Option<Zotero>,
+    pub data: Option<Data>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_logger();
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            api::login::login,
+            api::get_collections::get_collections,
+            api::refresh::refresh,
+            api::get_items::get_items_by_collection,
+            api::download_pdf::download_pdf,
+        ])
+        .setup(|app| {
+            let scope = app.fs_scope();
+            scope.allow_directory("/data", true);
+            dbg!(scope.allowed());
+
+            app.manage(Mutex::new(AppState {
+                ..Default::default()
+            }));
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn init_logger() {
+    use android_logger::Config;
+    use log::LevelFilter;
+    #[cfg(debug_assertions)]
+    let level = LevelFilter::Debug;
+    #[cfg(not(debug_assertions))]
+    let level = LevelFilter::Info;
+    android_logger::init_once(
+        Config::default()
+            .with_max_level(level)
+            .with_tag("ZoteroClient"),
+    );
+
+    tracing::info!("init logger success!");
 }
 
 #[cfg(test)]
