@@ -8,7 +8,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ItemListView: typeof import('./src/components/ItemListView.vue')['default']
+    NAffix: typeof import('naive-ui')['NAffix']
     NButton: typeof import('naive-ui')['NButton']
+    NDialogProvider: typeof import('naive-ui')['NDialogProvider']
     NEllipsis: typeof import('naive-ui')['NEllipsis']
     NIcon: typeof import('naive-ui')['NIcon']
     NImage: typeof import('naive-ui')['NImage']

@@ -36,7 +36,7 @@ mod tests {
     async fn test_get_items() {
         let zotero = Zotero::new(dotenv!("ZOTERO_API_KEY").into()).await.unwrap();
         let items = zotero.get_all_items().await.unwrap();
-        println!("{:?}", items);
+        println!("{}", serde_json::to_string(&items).unwrap());
     }
 
     #[cfg(feature = "__local_test__")]

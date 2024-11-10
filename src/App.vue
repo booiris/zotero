@@ -1,13 +1,15 @@
 <script setup lang="ts"></script>
 
 <template>
-  <n-message-provider>
-    <router-view v-slot="{ Component }">
-      <transition name="fade" mode="out-in">
-        <component :is="Component" />
-      </transition>
-    </router-view>
-  </n-message-provider>
+  <n-dialog-provider>
+    <n-message-provider>
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </n-message-provider>
+  </n-dialog-provider>
 </template>
 
 <style>

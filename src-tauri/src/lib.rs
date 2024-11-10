@@ -2,7 +2,6 @@ use dal::zotero::Zotero;
 use model::zotero_data::Data;
 use parking_lot::Mutex;
 use tauri::Manager;
-use tauri_plugin_fs::FsExt;
 
 mod api;
 mod dal;
@@ -20,8 +19,6 @@ pub fn run() {
     init_logger();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             api::login::login,
@@ -31,10 +28,6 @@ pub fn run() {
             api::download_pdf::download_pdf,
         ])
         .setup(|app| {
-            let scope = app.fs_scope();
-            scope.allow_directory("/data", true);
-            dbg!(scope.allowed());
-
             app.manage(Mutex::new(AppState {
                 ..Default::default()
             }));

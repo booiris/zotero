@@ -12,13 +12,13 @@ pub enum Error {
     #[error("[webdav client]: {0}")]
     WebDav(#[from] crate::dal::webdav::error::WebDavError),
 
-    #[error("[file io]: {0}")]
+    #[error("[file io]: {0:?}")]
     FileIo(#[from] std::io::Error),
 
-    #[error("[tokio file]: {0}")]
+    #[error("[tokio file]: {0:?}")]
     DownloadFile(#[from] reqwest::Error),
 
-    #[error("[zip]: {0}")]
+    #[error("[zip]: {0:?}")]
     Zip(#[from] zip::result::ZipError),
 
     #[error("[shell]: {0}")]
@@ -41,7 +41,11 @@ impl serde::Serialize for Error {
             Error::TokioJoin(_) => "tokio_join",
             Error::WebDav(_) => "webdav",
         };
-        tracing::error!("[{}] get error: {:?}", err_type, err);
+        if let Error::Raw(e) = self {
+            tracing::error!("[{}] get error: {:?}", err_type, e);
+        } else {
+            tracing::error!("[{}] get error: {:?}", err_type, err);
+        }
         serializer.serialize_str(&err)
     }
 }

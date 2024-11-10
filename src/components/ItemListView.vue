@@ -6,10 +6,10 @@
                     <n-icon size="20" class="file-icon">
                         <DocumentOutline />
                     </n-icon>
-                    <n-ellipsis style="max-width: 240px">
+                    <n-ellipsis style="width: 400px">
                         {{ item.title }}
                     </n-ellipsis>
-                    <n-button circle round :loading="loadingStates[item.key]" @click="downloadPdf(item)">
+                    <n-button circle round :disabled="loading" @click="downloadPdf(item)">
                         <template #icon>
                             <n-icon>
                                 <DownloadOutline />
@@ -23,17 +23,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue'
-import { NIcon, NList, NListItem, useMessage } from 'naive-ui'
+import { ref, watch } from 'vue'
+import { NIcon, NList, NListItem, useDialog, useMessage } from 'naive-ui'
 import { DocumentOutline, DownloadOutline } from '@vicons/ionicons5'
 import { get_items_by_collection, type SimpleItem } from '@/api/get_item_by_collection'
 import { useRoute } from 'vue-router'
 import { download_pdf } from '@/api/download_pdf'
+import { Channel } from '@tauri-apps/api/core'
+import prettyBytes from 'pretty-bytes';
 
 const items = ref<SimpleItem[]>([])
 const route = useRoute()
 const message = useMessage()
-const loadingStates = reactive<Record<string, boolean>>({})
 
 watch(
     () => route.params.key,
@@ -41,9 +42,7 @@ watch(
         if (newKey) {
             try {
                 items.value = await get_items_by_collection(newKey as string)
-                items.value.forEach(item => {
-                    loadingStates[item.key] = false
-                })
+                loading.value = false
             } catch (e) {
                 console.error('get collections items failed: ', e)
                 message.error('get collections items failed: ' + e)
@@ -53,18 +52,39 @@ watch(
     { immediate: true }
 )
 
+const dialog = useDialog()
+const loading = ref(false)
+const downloadedSize = ref(0)
+
 const downloadPdf = async (item: SimpleItem) => {
-    loadingStates[item.key] = true
-    await download_pdf(item.key)
-        .then(() => {
-            message.success('download pdf ' + item.title + ' success')
-        })
-        .catch((e) => {
-            message.error('download pdf failed: ' + e)
-        })
-        .finally(() => {
-            loadingStates[item.key] = false
-        })
+    loading.value = true
+    downloadedSize.value = 0
+
+    const channel = new Channel<number>();
+    channel.onmessage = (size: number) => {
+        console.log('downloaded size: ', size)
+        downloadedSize.value = size
+    };
+
+    const d = dialog.create({
+        bordered: true,
+        title: 'downloading pdf',
+        content: () => `downloading ${item.title}... (${prettyBytes(downloadedSize.value)})`,
+        closable: false,
+        closeOnEsc: false,
+        transformOrigin: 'center',
+        maskClosable: false,
+    })
+
+    try {
+        await download_pdf(item.key, channel)
+        message.success('download pdf ' + item.title + ' success')
+    } catch (e) {
+        message.error('download pdf ' + item.title + ' failed: ' + e)
+    } finally {
+        loading.value = false
+        d.destroy()
+    }
 }
 </script>
 
