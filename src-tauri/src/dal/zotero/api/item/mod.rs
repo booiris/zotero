@@ -1,4 +1,4 @@
-use model::Item;
+use model::{Item, UploadAuthOk, UploadAuthResponse};
 
 use crate::dal::zotero::{error::ZoteroError, Zotero};
 
@@ -24,6 +24,28 @@ impl Zotero {
             .await?;
         Ok(resp)
     }
+
+    pub async fn start_upload(
+        &self,
+        key: impl AsRef<str>,
+        form: &[(&str, &str)],
+        old_md5: &str,
+    ) -> Result<UploadAuthResponse, ZoteroError> {
+        let resp = self.user_post("/items", key, form, old_md5).await?;
+        Ok(resp)
+    }
+
+    pub async fn finish_upload(
+        &self,
+        key: impl AsRef<str>,
+        auth_resp: UploadAuthOk,
+        old_md5: &str,
+    ) -> Result<(), ZoteroError> {
+        let resp = self.user_post_resp(key, auth_resp, old_md5).await?;
+        tracing::info!("finish upload resp: {:?}", resp);
+        tracing::info!("finish upload resp: {:?}", resp.text().await);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -48,5 +70,33 @@ mod tests {
             .await
             .unwrap();
         println!("{}", serde_json::to_string(&items).unwrap());
+    }
+
+    #[cfg(feature = "__local_test__")]
+    #[tokio::test]
+    async fn test_get_upload_auth() {
+        let zotero = Zotero::new(dotenv!("ZOTERO_API_KEY").into()).await.unwrap();
+        let form = [
+            ("md5", dotenv!("TEST_ITEM_NEW_MD5")),
+            ("filename", "test"),
+            ("filesize", "1000"),
+            ("mtime", "1000"),
+        ];
+        let resp = zotero
+            .start_upload(
+                dotenv!("TEST_ITEM_KEY"),
+                &form,
+                dotenv!("TEST_ITEM_OLD_MD5"),
+            )
+            .await
+            .unwrap();
+
+        println!("{}", serde_json::to_string(&resp).unwrap());
+        if let UploadAuthResponse::Ok(new) = resp {
+            zotero
+                .finish_upload(dotenv!("TEST_ITEM_KEY"), new, dotenv!("TEST_ITEM_OLD_MD5"))
+                .await
+                .unwrap();
+        }
     }
 }

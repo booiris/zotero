@@ -1,21 +1,28 @@
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use anyhow::Context;
 use dotenvy_macro::dotenv;
 use futures_util::StreamExt;
+use log::info;
+use md5::{Digest, Md5};
 use parking_lot::Mutex;
+use serde::Deserialize;
 use tauri::ipc::Channel;
 use tauri::State;
 use tauri_plugin_shell::ShellExt;
 use tokio::fs;
+use tokio::io::AsyncReadExt;
+use tracing::debug;
 
 use crate::dal::webdav::{client, WebDavAuth};
+use crate::dal::zotero::api::item::model::UploadAuthResponse;
 use crate::dal::zotero::error::ZoteroError;
 use crate::error::Error;
 use crate::AppState;
 
 const DOCUMENT_PATH: &str = "/storage/emulated/0/Download/zotero";
+const DATA_PATH: &str = "/storage/emulated/0/Download/";
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn download_pdf(
@@ -40,13 +47,108 @@ pub async fn download_pdf(
         .ok_or(ZoteroError::NoData)?;
 
     let item = data.get(key).ok_or(ZoteroError::NoData)?;
-    let key = item
+    let item = item
         .sub_items
         .iter()
-        .find(|x| x.data.content_type == "application/pdf")
-        .ok_or(ZoteroError::NoPdf)?
-        .key
-        .as_ref();
+        .find(|x| x.data.content_type == "application/pdf" && x.data.filename.is_some())
+        .ok_or(ZoteroError::NoPdf)?;
+    let key = item.key.as_ref();
+
+    let prop = client
+        .get("/zotero/".to_string() + key + ".prop")
+        .await?
+        .text()
+        .await?;
+    let prop: Properties = quick_xml::de::from_str(&prop).context("parse prop failed")?;
+    let data_path = DATA_PATH
+        .parse::<PathBuf>()
+        .unwrap()
+        .join(item.data.filename.as_ref().unwrap());
+
+    debug!("data path: {:?}", data_path);
+
+    if data_path.exists() {
+        let mut file = tokio::fs::File::open(&data_path)
+            .await
+            .context("open file failed")?;
+        let meta = file.metadata().await?;
+        let file_modify_time =
+            chrono::DateTime::<chrono::Utc>::from(meta.modified()?).timestamp_millis();
+        let mut h = Md5::new();
+        let mut data = Vec::with_capacity(meta.len() as usize);
+        file.read_to_end(&mut data).await?;
+        h.update(&data);
+        let hash = hex::encode(h.finalize());
+
+        debug!("old hash: {}, new hash: {}", prop.hash, hash);
+        debug!(
+            "file modify time: {}, new file modify time: {}",
+            chrono::DateTime::<chrono::Utc>::from_timestamp_millis(prop.mtime)
+                .unwrap()
+                .with_timezone(&chrono::Local),
+            chrono::DateTime::<chrono::Utc>::from_timestamp_millis(file_modify_time)
+                .unwrap()
+                .with_timezone(&chrono::Local)
+        );
+
+        if hash == prop.hash {
+            tracing::info!("file already exists: {:?}", data_path);
+            app.shell().open(data_path.to_str().unwrap(), None)?;
+            return Ok(());
+        } else if prop.mtime > file_modify_time {
+            tracing::info!("file is outdated: {:?}", data_path);
+            return Err(Error::FileIsOutdated);
+        } else {
+            let zotero = state.lock().zotero.clone().ok_or(ZoteroError::NotLogin)?;
+            let resp = zotero
+                .start_upload(
+                    key,
+                    &[
+                        ("md5", &hash),
+                        ("filename", data_path.file_name().unwrap().to_str().unwrap()),
+                        ("filesize", &meta.len().to_string()),
+                        ("mtime", &file_modify_time.to_string()),
+                    ],
+                    &prop.hash,
+                )
+                .await?;
+
+            match resp {
+                UploadAuthResponse::Ok(ok) => {
+                    info!("start upload ok: {:?}", &ok.upload_key);
+                    let new_prop = get_new_prop(Properties {
+                        mtime: file_modify_time,
+                        hash,
+                    });
+
+                    let mut zip_data = Vec::new();
+                    {
+                        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+                        let options = zip::write::SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored);
+
+                        zip.start_file(format!("{}.pdf", key), options)?;
+                        zip.write_all(&data)?;
+                        zip.finish()?;
+                    }
+
+                    client.put(format!("/zotero/{}.zip", key), zip_data).await?;
+
+                    client
+                        .put("/zotero/".to_string() + key + ".prop", new_prop)
+                        .await?;
+
+                    zotero.finish_upload(key, ok, &prop.hash).await?;
+
+                    app.shell().open(data_path.to_str().unwrap(), None)?;
+                    return Ok(());
+                }
+                UploadAuthResponse::Exist(_) => {
+                    return Err(Error::FileAlreadyExists);
+                }
+            }
+        }
+    }
 
     let resp = client.get("/zotero/".to_string() + key + ".zip").await?;
     let size = resp.content_length().unwrap_or(0);
@@ -116,9 +218,21 @@ pub async fn download_pdf(
 
     if let Some(pdf_path) = pdf_path {
         tracing::info!("file_path: {:?}", pdf_path);
-        app.shell()
-            .open(pdf_path.to_str().unwrap().to_string(), None)?;
+        app.shell().open(pdf_path.to_str().unwrap(), None)?;
     }
 
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct Properties {
+    mtime: i64,
+    hash: String,
+}
+
+fn get_new_prop(prop: Properties) -> String {
+    format!(
+        "<properties version=\"1\"><mtime>{}</mtime><hash>{}</hash></properties>",
+        prop.mtime, prop.hash
+    )
 }

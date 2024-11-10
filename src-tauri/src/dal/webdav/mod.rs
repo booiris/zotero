@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use ahash::AHashMap;
 use error::WebDavError;
 use parking_lot::RwLock;
-use reqwest::Response;
+use reqwest::{Body, Response};
 use reqwest_dav::{Auth, Client, ClientBuilder};
 use tracing::debug;
 
@@ -24,6 +24,15 @@ impl WebDavClient {
     pub async fn get(&self, path: impl AsRef<str>) -> Result<Response, WebDavError> {
         debug!("get: {}", path.as_ref());
         Ok(self.client.get(path.as_ref()).await?)
+    }
+
+    pub async fn put(
+        &self,
+        path: impl AsRef<str>,
+        body: impl Into<Body>,
+    ) -> Result<(), WebDavError> {
+        debug!("put: {}", path.as_ref());
+        Ok(self.client.put(path.as_ref(), body).await?)
     }
 }
 

@@ -99,6 +99,7 @@ pub struct ItemData {
     pub date_added: String,
     pub date_modified: String,
     pub content_type: String,
+    pub filename: Option<String>,
     // 其他可选字段...
     #[serde(flatten)]
     pub extra_fields: HashMap<String, serde_json::Value>,
@@ -120,4 +121,27 @@ pub struct Tag {
     pub tag: String,
     #[serde(rename = "type")]
     pub tag_type: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UploadAuthResponse {
+    Ok(UploadAuthOk),
+    Exist(UploadAuthExist),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadAuthOk {
+    pub url: String,
+    pub content_type: String,
+    pub prefix: String,
+    pub suffix: String,
+    pub upload_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadAuthExist {
+    pub exists: String,
 }

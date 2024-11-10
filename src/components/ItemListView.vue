@@ -62,7 +62,6 @@ const downloadPdf = async (item: SimpleItem) => {
 
     const channel = new Channel<number>();
     channel.onmessage = (size: number) => {
-        console.log('downloaded size: ', size)
         downloadedSize.value = size
     };
 

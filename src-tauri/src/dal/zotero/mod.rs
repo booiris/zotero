@@ -1,8 +1,9 @@
 use std::sync::{Arc, LazyLock};
 
+use api::item::model::UploadAuthOk;
 use error::ZoteroError;
 use model::{KeyResp, ZoteroApiKey};
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, Response};
 use tauri::http::HeaderMap;
 pub mod api;
 pub mod error;
@@ -97,6 +98,78 @@ impl Zotero {
                 Err(ZoteroError::Data(e))
             }
         }
+    }
+
+    pub async fn user_post<T>(
+        &self,
+        path: impl AsRef<str>,
+        key: impl AsRef<str>,
+        form: &[(&str, &str)],
+        old_md5: impl AsRef<str>,
+    ) -> Result<T, ZoteroError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let url = format!(
+            "{}/users/{}{}/{}/file",
+            BASE_URL,
+            self.user_id,
+            path.as_ref(),
+            key.as_ref()
+        );
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(self.api_key.as_ref())
+            .header("If-Match", old_md5.as_ref())
+            .form(form)
+            .send()
+            .await?
+            .text()
+            .await?;
+        match serde_json::from_str(&response) {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                error!("resp data: {}, url: {}, error: {:?}", response, url, e);
+                Err(ZoteroError::Data(e))
+            }
+        }
+    }
+
+    pub async fn user_post_resp(
+        &self,
+        key: impl AsRef<str>,
+        auth_resp: UploadAuthOk,
+        old_md5: impl AsRef<str>,
+    ) -> Result<Response, ZoteroError> {
+        let mut form = reqwest::multipart::Form::new().text("params", "1");
+        form = form.part("prefix", reqwest::multipart::Part::text(auth_resp.prefix));
+        form = form.part("file", reqwest::multipart::Part::text("test"));
+        form = form.part("suffix", reqwest::multipart::Part::text(auth_resp.suffix));
+        form = form.part(
+            "upload",
+            reqwest::multipart::Part::text(auth_resp.upload_key),
+        );
+        form = form.part(
+            "contentType",
+            reqwest::multipart::Part::text(auth_resp.content_type.clone()),
+        );
+        let response = self
+            .client
+            .post(format!(
+                "{}/users/{}/items/{}/file",
+                BASE_URL,
+                self.user_id,
+                key.as_ref()
+            ))
+            .header("Content-Type", auth_resp.content_type)
+            .body("test")
+            .multipart(form)
+            .bearer_auth(&self.api_key)
+            .header("If-Match", old_md5.as_ref())
+            .send()
+            .await?;
+        Ok(response)
     }
 }
 

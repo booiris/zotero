@@ -27,7 +27,8 @@ reqwest = { version = "0.12", default-features = false, features = [
     "charset",
     "cookies",
     "gzip",
-    "stream"
+    "stream",
+    "multipart"
 ] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
@@ -45,6 +46,9 @@ zip = "2.2"
 dotenvy_macro = "0.15"
 tauri-plugin-shell = { path = "../../plugins-workspace/plugins/shell" }
 futures-util = "0.3"
+quick-xml = { version = "0.37", features = ["serialize"] }
+md-5 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 ctor = "0.2"
