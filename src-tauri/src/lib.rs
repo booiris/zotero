@@ -1,5 +1,5 @@
 use dal::zotero::Zotero;
-use model::zotero_data::Data;
+use model::{auth::Secret, zotero_data::Data};
 use parking_lot::Mutex;
 use tauri::Manager;
 
@@ -12,6 +12,7 @@ mod model;
 pub(crate) struct AppState {
     pub zotero: Option<Zotero>,
     pub data: Option<Data>,
+    pub api_key: Option<Secret>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,9 +27,14 @@ pub fn run() {
             api::refresh::refresh,
             api::get_items::get_items_by_collection,
             api::download_pdf::download_pdf,
+            api::is_login::is_login,
         ])
         .setup(|app| {
+            let api_path = app.path().app_data_dir().unwrap().join("api_key");
+            let api_key = std::fs::read_to_string(api_path).ok().map(Secret::from);
+
             app.manage(Mutex::new(AppState {
+                api_key,
                 ..Default::default()
             }));
             Ok(())

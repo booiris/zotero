@@ -23,12 +23,6 @@ pub enum Error {
 
     #[error("[shell]: {0}")]
     Shell(#[from] tauri_plugin_shell::Error),
-
-    #[error("file is outdated")]
-    FileIsOutdated,
-
-    #[error("file already exists, zotero server data may be outdated")]
-    FileAlreadyExists,
 }
 
 impl serde::Serialize for Error {
@@ -46,8 +40,6 @@ impl serde::Serialize for Error {
             Error::Raw(_) => "raw",
             Error::TokioJoin(_) => "tokio_join",
             Error::WebDav(_) => "webdav",
-            Error::FileIsOutdated => "file_is_outdated",
-            Error::FileAlreadyExists => "file_already_exists",
         };
         if let Error::Raw(e) = self {
             tracing::error!("[{}] get error: {:?}", err_type, e);

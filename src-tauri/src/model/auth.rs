@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 
 pub type UserName = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Secret(String);
 
 impl Debug for Secret {
